@@ -66,12 +66,14 @@ Actualmente, la ruta de la base de datos está definida estáticamente en `Datab
 // En DatabaseManager.java
 String dbPath = "TU_RUTA_LOCAL/inventario.db";
 ```
-##📦 Dependencias
+---
+## 📦 Dependencias
 Java JDK 8+
 
 SQLite JDBC Driver (necesario para conectar DatabaseManager con el archivo .db).
 
-##📊 Diagrama de Clases
+---
+## ☕ Diagrama de clases
 ```mermaid
 classDiagram
     MainApp ..> DispenseFrame : Inicia
