@@ -3,8 +3,11 @@ package com.poc.armario;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.dnd.DnDConstants;
+import java.awt.dnd.DropTarget;
+import java.awt.dnd.DropTargetDropEvent;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,102 +26,121 @@ public class DispenseFrame extends JFrame {
     }
 
     public DispenseFrame() {
-        setTitle("ARMARIO INTELIGENTE - Dispensación de Componentes");
+        setTitle("ARMARIO INTELIGENTE - Dispensación de Componentes Electrónicos");
+        setExtendedState(JFrame.MAXIMIZED_BOTH);  // Pantalla completa opcional
         setSize(1400, 800);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLayout(new GridLayout(1, 2, 10, 0));
+        setLayout(new BorderLayout(10, 10));
 
-        // === PANEL IZQUIERDO: INVENTARIO ===
-        JPanel leftPanel = new JPanel(new BorderLayout());
-        leftPanel.setBorder(BorderFactory.createTitledBorder(
+        // === PANEL PRINCIPAL: Split horizontal ===
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        splitPane.setDividerLocation(800);
+        splitPane.setResizeWeight(0.6);
+
+        // === IZQUIERDA: INVENTARIO ===
+        JPanel leftPanel = createInventoryPanel();
+        splitPane.setLeftComponent(leftPanel);
+
+        // === DERECHA: CARRITO ===
+        JPanel rightPanel = createCartPanel();
+        splitPane.setRightComponent(rightPanel);
+
+        add(splitPane, BorderLayout.CENTER);
+
+        // === BARRA INFERIOR: Info y botón grande ===
+        JPanel bottomPanel = new JPanel(new BorderLayout());
+        JLabel statusLabel = new JLabel(" Arrastra un archivo .txt/.cir aquí o haz doble click en un componente", JLabel.CENTER);
+        statusLabel.setForeground(Color.BLUE);
+        statusLabel.setFont(new Font("Arial", Font.ITALIC, 14));
+        bottomPanel.add(statusLabel, BorderLayout.NORTH);
+
+        JButton confirmBtn = new JButton("CONFIRMAR Y DISPENSAR TODOS LOS COMPONENTES");
+        confirmBtn.setFont(new Font("Arial", Font.BOLD, 22));
+        confirmBtn.setBackground(new Color(0, 140, 0));
+        confirmBtn.setForeground(Color.WHITE);
+        confirmBtn.setFocusPainted(false);
+        confirmBtn.setPreferredSize(new Dimension(0, 80));
+        confirmBtn.addActionListener(e -> confirmDispense());
+        bottomPanel.add(confirmBtn, BorderLayout.SOUTH);
+
+        add(bottomPanel, BorderLayout.SOUTH);
+
+        // Cargar datos
+        loadInventory();
+
+        // Activar drag & drop en toda la ventana
+        enableDragAndDropOnFrame();
+
+        setVisible(true);
+    }
+
+    private JPanel createInventoryPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder(
             BorderFactory.createLineBorder(new Color(0, 120, 215), 3),
-            " INVENTARIO DISPONIBLE"));
+            " INVENTARIO DISPONIBLE (Doble click para añadir)"));
 
         inventoryModel = new DefaultTableModel(
             new String[]{"ID", "Tipo", "Valor", "Stock", "Ubicación"}, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) { return false; }
+            @Override public boolean isCellEditable(int r, int c) { return false; }
         };
+
         inventoryTable = new JTable(inventoryModel);
-        inventoryTable.setRowHeight(28);
-        inventoryTable.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        inventoryTable.setRowHeight(30);
+        inventoryTable.setFont(new Font("Segoe UI", Font.PLAIN, 15));
         inventoryTable.getTableHeader().setBackground(new Color(0, 120, 215));
         inventoryTable.getTableHeader().setForeground(Color.WHITE);
-        inventoryTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-        // Doble click o click derecho para añadir
-        inventoryTable.addMouseListener(new MouseAdapter() {
+        // Doble click → añadir al carrito
+        inventoryTable.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2 || SwingUtilities.isRightMouseButton(e)) {
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2) {
                     int row = inventoryTable.getSelectedRow();
-                    if (row != -1) {
-                        addComponentFromInventory(row);
-                    }
+                    if (row != -1) addComponentFromInventory(row);
                 }
             }
         });
 
-        leftPanel.add(new JScrollPane(inventoryTable), BorderLayout.CENTER);
-        JLabel leftHint = new JLabel("Doble click o click derecho en un componente para añadir al carrito", SwingConstants.CENTER);
-        leftHint.setForeground(Color.GRAY);
-        leftPanel.add(leftHint, BorderLayout.SOUTH);
+        panel.add(new JScrollPane(inventoryTable), BorderLayout.CENTER);
+        return panel;
+    }
 
-        // === PANEL DERECHO: CARRITO ===
-        JPanel rightPanel = new JPanel(new BorderLayout());
-        rightPanel.setBorder(BorderFactory.createTitledBorder(
+    private JPanel createCartPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder(
             BorderFactory.createLineBorder(new Color(0, 150, 0), 3),
-            "CARRITO DE DISPENSACIÓN"));
+            " CARRITO DE DISPENSACIÓN"));
 
         cartModel = new DefaultTableModel(
-            new String[]{"ID", "Tipo", "Valor", "Solicitado", "Stock"}, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return column == 3; // Solo cantidad editable
-            }
+            new String[]{"ID", "Tipo", "Valor", "Cantidad", "Stock"}, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return c == 3; }
         };
+
         cartTable = new JTable(cartModel);
-        cartTable.setRowHeight(28);
+        cartTable.setRowHeight(30);
         cartTable.getTableHeader().setBackground(new Color(0, 150, 0));
         cartTable.getTableHeader().setForeground(Color.WHITE);
 
-        rightPanel.add(new JScrollPane(cartTable), BorderLayout.CENTER);
+        panel.add(new JScrollPane(cartTable), BorderLayout.CENTER);
 
-        // Botones carrito
-        JPanel cartButtons = new JPanel(new FlowLayout());
-        JButton removeBtn = new JButton("Eliminar");
-        removeBtn.addActionListener(e -> {
+        JPanel buttons = new JPanel(new FlowLayout());
+        JButton remove = new JButton("Eliminar");
+        remove.addActionListener(e -> {
             int row = cartTable.getSelectedRow();
             if (row != -1) {
                 cart.remove(row);
                 refreshCart();
             }
         });
-        JButton clearBtn = new JButton("Vaciar Carrito");
-        clearBtn.addActionListener(e -> {
-            cart.clear();
-            refreshCart();
-        });
-        cartButtons.add(removeBtn);
-        cartButtons.add(clearBtn);
-        rightPanel.add(cartButtons, BorderLayout.NORTH);
+        JButton clear = new JButton("Vaciar");
+        clear.addActionListener(e -> { cart.clear(); refreshCart(); });
+        buttons.add(remove);
+        buttons.add(clear);
+        panel.add(buttons, BorderLayout.SOUTH);
 
-        // Botón confirmar grande
-        JButton confirmBtn = new JButton("CONFIRMAR Y DISPENSAR");
-        confirmBtn.setFont(new Font("Arial", Font.BOLD, 24));
-        confirmBtn.setBackground(new Color(0, 150, 0));
-        confirmBtn.setForeground(Color.WHITE);
-        confirmBtn.setPreferredSize(new Dimension(0, 80));
-        confirmBtn.addActionListener(e -> confirmDispense());
-        rightPanel.add(confirmBtn, BorderLayout.SOUTH);
-
-        // Añadir paneles a la ventana
-        add(leftPanel);
-        add(rightPanel);
-
-        // Cargar inventario
-        loadInventory();
+        return panel;
     }
 
     private void addComponentFromInventory(int row) {
@@ -128,36 +150,34 @@ public class DispenseFrame extends JFrame {
         int stock = (Integer) inventoryModel.getValueAt(row, 3);
 
         String input = JOptionPane.showInputDialog(this,
-            "<html><b>" + tipo + " " + valor + "</b><br>Stock disponible: " + stock + 
-            "<br><br>¿Cuántas unidades quieres dispensar?</html>", "1");
-
+            "<html><b>" + tipo + " " + valor + "</b><br>Stock: " + stock + "<br><br>Cantidad:</html>", "1");
         if (input == null || input.trim().isEmpty()) return;
 
         try {
             int qty = Integer.parseInt(input.trim());
-            if (qty <= 0) throw new Exception();
-            if (qty > stock) {
-                JOptionPane.showMessageDialog(this, "No hay suficiente stock", "Error", JOptionPane.ERROR_MESSAGE);
+            if (qty <= 0 || qty > stock) {
+                JOptionPane.showMessageDialog(this, "Cantidad inválida o sin stock", "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
-
-            Component comp = DatabaseManager.getInstance().findComponent(tipo, valor);
-            if (comp != null) {
-                // Si ya está en el carrito, sumar
-                for (CartItem item : cart) {
-                    if (item.component.getId().equals(id)) {
-                        item.requestedQuantity += qty;
-                        refreshCart();
-                        return;
-                    }
-                }
-                // Si no, añadir nuevo
-                cart.add(new CartItem(comp, qty));
-                refreshCart();
+            Component c = DatabaseManager.getInstance().findComponent(tipo, valor);
+            if (c != null) {
+                addToCart(c, qty);
             }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Cantidad no válida", "Error", JOptionPane.ERROR_MESSAGE);
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Solo números", "Error", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    public void addToCart(Component c, int qty) {
+        for (CartItem item : cart) {
+            if (item.component.getId().equals(c.getId())) {
+                item.requestedQuantity += qty;
+                refreshCart();
+                return;
+            }
+        }
+        cart.add(new CartItem(c, qty));
+        refreshCart();
     }
 
     private void refreshCart() {
@@ -178,50 +198,82 @@ public class DispenseFrame extends JFrame {
         List<Component> list = DatabaseManager.getInstance().getAllComponents();
         for (Component c : list) {
             inventoryModel.addRow(new Object[]{
-                c.getId(),
-                c.getTipo(),
-                c.getValor(),
-                c.getCantidad(),
-                c.getUbicacion()
+                c.getId(), c.getTipo(), c.getValor(), c.getCantidad(), c.getUbicacion()
             });
         }
     }
 
+    private void enableDragAndDropOnFrame() {
+        setDropTarget(new DropTarget(this, DnDConstants.ACTION_COPY, new java.awt.dnd.DropTargetAdapter() {
+            @Override
+            public void drop(DropTargetDropEvent dtde) {
+                try {
+                    dtde.acceptDrop(DnDConstants.ACTION_COPY);
+                    List<File> files = (List<File>) dtde.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
+
+                    for (File file : files) {
+                        String name = file.getName().toLowerCase();
+                        if (name.endsWith(".txt") || name.endsWith(".cir") || name.endsWith(".net")) {
+                            List<NetlistParser.ComponentRequest> reqs = NetlistParser.parse(file.getAbsolutePath());
+
+                            int added = 0;
+                            StringBuilder missing = new StringBuilder();
+
+                            for (NetlistParser.ComponentRequest r : reqs) {
+                                Component c = DatabaseManager.getInstance().findComponent(r.tipo, r.valor);
+                                if (c != null && c.getCantidad() > 0) {
+                                    addToCart(c, 1);
+                                    added++;
+                                } else {
+                                    missing.append(r.tipo).append(" ").append(r.valor).append("\n");
+                                }
+                            }
+
+                            String msg = "Netlist cargada: " + file.getName() + "\n" + added + " componentes añadidos";
+                            if (missing.length() > 0) {
+                                msg += "\n\nNo encontrados:\n" + missing;
+                            }
+                            JOptionPane.showMessageDialog(DispenseFrame.this, msg, "Resultado", JOptionPane.INFORMATION_MESSAGE);
+                        }
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(DispenseFrame.this, "Error al leer archivo", "Error", JOptionPane.ERROR_MESSAGE);
+                    ex.printStackTrace();
+                }
+            }
+        }));
+    }
+
     private void confirmDispense() {
         if (cart.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "El carrito está vacío");
+            JOptionPane.showMessageDialog(this, "Carrito vacío");
             return;
         }
 
-        // Validar stock actualizado
         for (CartItem item : cart) {
             Component fresh = DatabaseManager.getInstance().findComponent(
                 item.component.getTipo(), item.component.getValor());
-            if (fresh.getCantidad() < item.requestedQuantity) {
-                JOptionPane.showMessageDialog(this,
-                "Stock insuficiente para: " + item.component.getTipo() + " " + item.component.getValor());
+            if (fresh == null || fresh.getCantidad() < item.requestedQuantity) {
+                JOptionPane.showMessageDialog(this, "Sin stock: " + item.component.getTipo() + " " + item.component.getValor());
                 return;
             }
         }
 
-        // Dispensar
         for (CartItem item : cart) {
             DatabaseManager.getInstance().dispenseComponent(item.component.getId(), item.requestedQuantity);
         }
 
         JOptionPane.showMessageDialog(this,
-            "¡Dispensación completada con éxito!\nSe han dispensado " + cart.size() + " referencias.",
+            "¡Dispensación completada!\nSe han entregado " + cart.size() + " referencias.",
             "Éxito", JOptionPane.INFORMATION_MESSAGE);
 
         cart.clear();
         refreshCart();
-        loadInventory(); // Actualiza stock en tiempo real
+        loadInventory();
     }
 
-    // Para que solo haya una ventana abierta
+    // Lanzador
     public static void open() {
-        SwingUtilities.invokeLater(() -> {
-            new DispenseFrame().setVisible(true);
-        });
+        SwingUtilities.invokeLater(() -> new DispenseFrame());
     }
 }

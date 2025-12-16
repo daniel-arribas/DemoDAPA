@@ -2,4 +2,5 @@ eclipse.preferences.version=1
 encoding//src/com/poc/armario/Component.java=UTF-8
 encoding//src/com/poc/armario/DatabaseManager.java=UTF-8
 encoding//src/com/poc/armario/DispenseFrame.java=UTF-8
+encoding//src/com/poc/armario/NetlistParser.java=UTF-8
 encoding//src/com/poc/armario/UnitNormalizer.java=UTF-8
